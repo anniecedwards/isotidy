@@ -1,6 +1,6 @@
-# GB-IRMS processing: adapt, filter, and correct run drift by analysis number.
+# GB-IRMS processing: adapt, filter, correct run drift, linearity, and scale.
 
-#' Process GB-IRMS data with analysis-number drift correction
+#' Process GB-IRMS data with run drift, linearity, and scale calibration
 #'
 #' Adapts a GB export and applies name exclusions, then selects sample peaks
 #' using the inclusive configured low/high range. Other peaks remain available
@@ -19,6 +19,11 @@
 #'   config$processing$drift_standard_id or "ETH4".
 #' @param apply_drift_correction Apply a linear analysis-number correction
 #'   when at least three drift-standard analyses are available.
+#' @param apply_linearity Apply area-dependent linearity correction using the
+#'   configured calibration standard and selected sample peak range.
+#' @param stds_reference_df Laboratory standards reference table. Defaults to
+#'   config$stds_reference_df. Supplying it enables linearity and scale
+#'   calibration; without it, those stages are reported as skipped.
 #' @param sample_peak_numbers Optional explicit peak-number vector overriding
 #'   the configured low/high range.
 #' @param verbose Print progress information.
@@ -35,6 +40,8 @@ process_gb <- function(
     exclude_analysis_numbers = NULL,
     drift_standard_id = NULL,
     apply_drift_correction = TRUE,
+    apply_linearity = TRUE,
+    stds_reference_df = NULL,
     sample_peak_numbers = NULL,
     verbose = TRUE
 ) {
@@ -52,6 +59,11 @@ process_gb <- function(
       is.na(apply_drift_correction)) {
     stop("'apply_drift_correction' must be TRUE or FALSE.")
   }
+  if (!is.logical(apply_linearity) || length(apply_linearity) != 1L ||
+      is.na(apply_linearity)) {
+    stop("'apply_linearity' must be TRUE or FALSE.")
+  }
+  if (is.null(stds_reference_df)) stds_reference_df <- config$stds_reference_df
 
   if (is.null(exclude_analysis_numbers)) {
     exclude_analysis_numbers <- config$processing$exclude_analysis_numbers %||%
@@ -115,7 +127,10 @@ process_gb <- function(
   exclude_analysis_rows <- as.character(data$analysis_no) %in%
     exclude_analysis_numbers
   excluded_analyses <- data[exclude_analysis_rows, , drop = FALSE]
-  excluded_analyses$analysis_exclusion_reason <- "analysis number listed for exclusion"
+  excluded_analyses$analysis_exclusion_reason <- rep(
+    "analysis number listed for exclusion",
+    nrow(excluded_analyses)
+  )
   candidate_data <- data[!exclude_analysis_rows, , drop = FALSE]
 
   matched_patterns <- lapply(exclude_patterns, function(pattern) {
@@ -183,7 +198,10 @@ process_gb <- function(
   in_sample_range <- !is.na(all_peak_data$peak_number) &
     all_peak_data$peak_number %in% sample_peak_numbers
   excluded_peaks <- all_peak_data[!in_sample_range, , drop = FALSE]
-  excluded_peaks$peak_exclusion_reason <- "outside configured sample peak numbers"
+  excluded_peaks$peak_exclusion_reason <- rep(
+    "outside configured sample peak numbers",
+    nrow(excluded_peaks)
+  )
   sample_data <- all_peak_data[in_sample_range, , drop = FALSE]
 
   # Fit against one mean per standard analysis so repeated peaks from a single
@@ -287,9 +305,101 @@ process_gb <- function(
     }
   }
 
+  linearity_model <- NULL
+  linearity_correction <- list(applied = FALSE, reason = "disabled")
+  scale_model <- NULL
+  scale_correction <- list(applied = FALSE, reason = "not available")
+  standards <- NULL
+
+  # Calibrate in the same order as the GB workflow: drift -> linearity -> scale.
+  if (apply_linearity) {
+    if (is.null(stds_reference_df)) {
+      linearity_correction$reason <- "no laboratory standards reference table supplied"
+    } else {
+      if (is.null(config$calibration_standards) ||
+          !length(config$calibration_standards)) {
+        stop("Configure standards.calibration_standards to fit GB linearity.")
+      }
+      stds_df <- extract_standards(
+        df = sample_data,
+        stds_reference_df = stds_reference_df,
+        config = config,
+        verbose = verbose
+      )
+      linearity_model <- build_linearity_model(
+        stds_df = stds_df,
+        config = config,
+        verbose = verbose,
+        create_plot = TRUE
+      )
+      sample_data <- apply_linearity_correction(
+        df = sample_data,
+        linearity_model = linearity_model,
+        verbose = verbose
+      )
+      linearity_correction <- list(applied = TRUE, reason = "applied")
+    }
+  }
+
+  if (!is.null(stds_reference_df)) {
+    scale_delta_column <- if (isTRUE(linearity_correction$applied)) {
+      "delta_value_linearity_corrected"
+    } else {
+      "delta_value"
+    }
+    standard_rows <- sample_data |>
+      dplyr::filter(.data$is_standard) |>
+      dplyr::group_by(.data$injection_id, .data$sample_id) |>
+      dplyr::summarise(
+        scale_delta = mean(.data[[scale_delta_column]], na.rm = TRUE),
+        is_standard = TRUE,
+        .groups = "drop"
+      )
+    names(standard_rows)[names(standard_rows) == "scale_delta"] <- scale_delta_column
+    standards <- extract_standards(
+      df = standard_rows,
+      stds_reference_df = stds_reference_df,
+      config = config,
+      verbose = verbose
+    )
+    scale_model <- build_scale_model(
+      stds_df = standards,
+      delta_column = scale_delta_column,
+      reference_column = "delta_value_reference",
+      config = config,
+      verbose = verbose
+    )
+    sample_data <- apply_scale_correction(
+      df = sample_data,
+      scale_model = scale_model,
+      verbose = verbose
+    )
+    scale_correction <- list(applied = TRUE, reason = "applied")
+  } else {
+    scale_correction$reason <- "no laboratory standards reference table supplied"
+  }
+
+  output_columns <- c(
+    output_columns,
+    "delta_value_linearity_corrected",
+    "delta_value_final"
+  )
   output <- prepare_output(
     df = sample_data,
     output_cols = intersect(output_columns, names(sample_data)),
+    verbose = verbose
+  )
+  visualization_column <- if ("delta_value_final" %in% names(sample_data)) {
+    "delta_value_final"
+  } else {
+    "delta_value"
+  }
+  visualization_data <- summarize_replicates(
+    data = sample_data,
+    peripheral = "GB",
+    config = config,
+    schema = schema,
+    value_columns = visualization_column,
     verbose = verbose
   )
 
@@ -318,6 +428,7 @@ process_gb <- function(
   list(
     data = sample_data,
     output = output,
+    visualization_data = visualization_data,
     all_peak_data = all_peak_data,
     excluded_data = excluded_data,
     excluded_analyses = excluded_analyses,
@@ -325,6 +436,12 @@ process_gb <- function(
     exclude_patterns = exclude_patterns,
     exclude_analysis_numbers = exclude_analysis_numbers,
     sample_peak_numbers = sample_peak_numbers,
-    drift_correction = drift_correction
+    drift_correction = drift_correction,
+    linearity_correction = linearity_correction,
+    scale_correction = scale_correction,
+    linearity_model = linearity_model,
+    scale_model = scale_model,
+    standards = standards,
+    models = list(linearity = linearity_model, scale = scale_model)
   )
 }

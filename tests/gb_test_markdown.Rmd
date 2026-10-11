@@ -46,6 +46,12 @@ raw_data_path <- file.path(
 
 raw_gb <- readxl::read_xls(raw_data_path)
 
+lab_stds <- load_lab_standards(
+  path = file.path(lab_config_dir, "lab_standards.yml"),
+  peripheral = "GB"
+)
+
+
 schemas <- load_peripheral_schemas()
 schema <- get_peripheral_schema(
   schemas = schemas,
@@ -133,8 +139,7 @@ raw_analysis_inventory
 ```
 
 ```{r adapt}
-# Replace these with the Analysis numbers for the later-day standards.
-exclude_analysis_numbers <- c(65135, 65136, 65138, 65139, 65140)
+exclude_analysis_numbers <- c(65086, 65100, 65120, 65126, 65135, 65136, 65138, 65139, 65140)
 
 gb_result <- process_gb(
   raw_df = raw_gb,
@@ -145,6 +150,8 @@ gb_result <- process_gb(
   exclude_analysis_numbers = exclude_analysis_numbers,
   drift_standard_id = "ETH4",
   apply_drift_correction = TRUE,
+  apply_linearity = FALSE,
+  stds_reference_df = lab_stds,
   verbose = TRUE
 )
 
@@ -214,6 +221,21 @@ independent standard injections.
 ```{r nahco3-intensity-data}
 nahco3_peaks <- gb_data |>
   filter(standard_id == "NaHCO3") |>
+  filter(
+    is.finite(delta_value),
+    is.finite(area_or_voltage),
+    area_or_voltage > 0
+  ) |>
+  mutate(
+    concentration_label = if_else(
+      is.na(standard_variant) | standard_variant == "",
+      "(no concentration suffix)",
+      standard_variant
+    )
+  )
+
+eth4_peaks <- gb_data |>
+  filter(standard_id == "eth4") |>
   filter(
     is.finite(delta_value),
     is.finite(area_or_voltage),
@@ -371,6 +393,31 @@ ggplot(
   theme_minimal() +
   theme(legend.position = "none")
 ```
+
+```{r}
+nahco3_peaks %>%
+  dplyr::arrange(.data$injection_id, .data$peak_number) %>%
+  ggplot(
+    aes(
+      x = area_or_voltage,
+      y = delta_value,
+      group = injection_id,
+      color = concentration_label
+    )
+  ) +
+  geom_path(alpha = 0.45) +
+  geom_point(alpha = 0.75) +
+  scale_x_log10() +
+  labs(
+    title = "NaHCO3 isotope value versus peak intensity within each injection",
+    x = "Area / voltage (log10 scale)",
+    y = expression(delta^{13}*"C (‰)"),
+    color = "Standard label"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+```
+
 
 ```{r nahco3-area-by-peak-order, fig.width=9, fig.height=6}
 ggplot(
@@ -530,3 +577,143 @@ ETH4 is the fitting reference, so its flattening is not an independent
 validation. The NaHCO3 intensity slope table compares the candidate area trend
 before and after drift adjustment. The separate within-analysis SD shows
 whether repeated peaks themselves are stable.
+
+```{r}
+ggplot(
+  nahco3_peaks,
+  aes(
+    x = peak_number,
+    y = delta_value,
+    color = concentration_label
+  )
+) +
+  geom_point(
+    position = position_dodge(width = 0.5),
+    alpha = 0.6
+  ) +
+  stat_summary(
+    aes(group = concentration_label),
+    fun = mean,
+    geom = "line",
+    position = position_dodge(width = 0.5)
+  ) +
+  scale_x_continuous(breaks = sort(unique(nahco3_peaks$peak_number))) +
+  labs(
+    title = "NaHCO3 δ13C by peak number, compared across concentrations",
+    x = "Peak number",
+    y = expression(delta^{13}*"C (‰)"),
+    color = "Standard label"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+```
+
+```{r}
+ggplot(
+  nahco3_peaks,
+  aes(
+    x = area_or_voltage,
+    y = delta_value,
+    color = peak_number
+  )
+) +
+  geom_point(size = 2, alpha = 0.8) +
+  scale_x_log10() +
+  scale_color_viridis_c(name = "Peak number") +
+  labs(
+    title = "NaHCO3 δ13C versus intensity, colored by peak number",
+    x = "Area / voltage (log10 scale)",
+    y = expression(delta^{13}*"C (‰)")
+  ) +
+  theme_minimal() +
+  theme(legend.position = "right")
+```
+
+```{r}
+# Intensity and peak number, without concentration
+fit_intensity_order <- lm(
+  delta_value ~ log10(area_or_voltage) + peak_number,
+  data = nahco3_peaks
+)
+summary(fit_intensity_order)
+
+# Adding concentration as a fixed effect
+fit_with_concentration <- lm(
+  delta_value ~ log10(area_or_voltage) + peak_number + concentration_label,
+  data = nahco3_peaks
+)
+summary(fit_with_concentration)
+```
+
+```{r}
+eth4_peaks <- gb_result$data %>%
+  dplyr::filter(
+    .data$standard_id == "ETH4",
+    is.finite(.data$delta_value),
+    is.finite(.data$area_or_voltage)
+  )
+
+eth4_peaks %>%
+  dplyr::count(injection_id, standard_variant, name = "n_peaks")
+
+eth4_slopes <- eth4_peaks %>%
+  dplyr::group_by(injection_id, standard_variant) %>%
+  dplyr::summarise(
+    n = dplyr::n(),
+    drift_offset = dplyr::first(.data$drift_offset),
+    slope_per_peak = if (dplyr::n() < 3) NA_real_ else
+      coef(lm(delta_value ~ peak_number))[["peak_number"]],
+    slope_per_log10_intensity = if (dplyr::n() < 3) NA_real_ else
+      coef(lm(delta_value ~ log10(area_or_voltage)))[[2]],
+    slope_per_peak_raw = if (dplyr::n() < 3) NA_real_ else
+      coef(lm(delta_value_raw ~ peak_number))[["peak_number"]],
+    .groups = "drop"
+  )
+
+eth4_slopes
+```
+
+```{r linearity-correction}
+gb_result$linearity_model$plot
+gb_result$linearity_model$r_squared
+gb_result$linearity_correction
+```
+```{r}
+nahco3_injections |>
+  mutate(umol = as.numeric(stringr::str_extract(concentration_label, "[0-9.]+"))) |>
+  ggplot(aes(x = umol, y = mean_delta)) +
+  geom_point(size = 2.5) +
+  geom_smooth(method = "lm", formula = y ~ x, se = TRUE, color = "steelblue") +
+  labs(
+    title = "NaHCO3: isotope value versus concentration",
+    x = "Amount (µmol)",
+    y = expression(delta^{13}*"C (‰)")
+  ) +
+  theme_minimal()
+```
+
+```{r scale-correction}
+gb_result$scale_model$slope
+gb_result$scale_model$r_squared
+gb_result$scale_model$stds_data
+gb_result$scale_correction
+gb_scaled <- gb_result$data
+```
+```{r scale-correction-check}
+# Check standards recover their certified values
+gb_scaled |>
+  dplyr::filter(.data$is_standard) |>
+  dplyr::group_by(sample_id) |>
+  dplyr::summarise(
+    n_peaks = dplyr::n(),
+    mean_measured = mean(.data$delta_value_linearity_corrected, na.rm = TRUE),
+    mean_scaled = mean(.data$delta_value_final, na.rm = TRUE),
+    sd_scaled = sd(.data$delta_value_final, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  dplyr::left_join(
+    lab_stds |> dplyr::select(standard_id, delta_value_reference = delta_value),
+    by = c("sample_id" = "standard_id")
+  ) |>
+  dplyr::mutate(residual = mean_scaled - delta_value_reference)
+```

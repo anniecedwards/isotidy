@@ -1,0 +1,160 @@
+---
+title: "GasBench IRMS Processing Summary"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: readable
+    self_contained: true
+params:
+  result: NULL
+  config: NULL
+  data_file: NULL
+  corrections_file: NULL
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+`%||%` <- function(x, y) if (is.null(x)) y else x
+result <- params$result
+config <- params$config
+```
+
+# Processing summary
+
+This report documents GasBench sample selection, run drift adjustment,
+linearity correction, scale calibration, and exclusions.
+
+## Experiment
+
+```{r experiment}
+processing <- config$processing %||% list()
+experiment_info <- data.frame(
+  Field = c("Experiment", "File", "Peripheral", "Element", "Isotope"),
+  Value = c(
+    config$experiment_name %||% NA_character_,
+    config$file_name %||% NA_character_,
+    "GB",
+    processing$element %||% NA_character_,
+    if (nrow(result$data) > 0) result$data$isotope[[1]] else NA_character_
+  )
+)
+knitr::kable(experiment_info)
+```
+
+## Correction stages
+
+```{r corrections}
+correction_file <- params$corrections_file
+if (!is.null(correction_file) && file.exists(correction_file)) {
+  knitr::kable(utils::read.csv(correction_file, stringsAsFactors = FALSE))
+}
+```
+
+## Drift correction
+
+The run drift model is fitted to one mean per selected standard analysis and
+applied by instrument analysis number. Analyses outside the fitted range are
+marked in the processed data.
+
+```{r drift-details}
+drift <- result$drift_correction
+drift_info <- data.frame(
+  Metric = c(
+    "Applied", "Reason", "Standard", "Standard analyses",
+    "Analysis range", "Reference delta", "Slope per analysis",
+    "R-squared", "Slope p-value", "Residual SD", "Extrapolated rows"
+  ),
+  Value = c(
+    drift$applied %||% FALSE,
+    drift$reason %||% NA_character_,
+    drift$standard_id %||% NA_character_,
+    drift$n_standard_analyses %||% NA_integer_,
+    paste(drift$analysis_range, collapse = " to "),
+    drift$reference_delta %||% NA_real_,
+    drift$slope_per_analysis %||% NA_real_,
+    drift$r_squared %||% NA_real_,
+    drift$slope_p_value %||% NA_real_,
+    drift$residual_sd %||% NA_real_,
+    drift$extrapolated_rows %||% 0L
+  )
+)
+knitr::kable(drift_info)
+if (is.data.frame(drift$standard_analyses) && nrow(drift$standard_analyses) > 0) {
+  knitr::kable(drift$standard_analyses)
+}
+```
+
+## Linearity calibration
+
+The calibration uses the configured sample peak range. The model and status
+below record whether area-dependent correction was applied.
+
+```{r linearity}
+linearity <- result$linearity_model
+if (!is.null(linearity)) {
+  linearity_info <- data.frame(
+    Metric = c("Calibration standard", "Delta column", "Slope", "Intercept", "R-squared", "Calibration rows"),
+    Value = c(
+      linearity$calibration_standard,
+      linearity$delta_column,
+      linearity$slope,
+      linearity$intercept,
+      linearity$r_squared,
+      linearity$n_stds
+    )
+  )
+  knitr::kable(linearity_info)
+  if (!is.null(linearity$plot)) print(linearity$plot)
+} else {
+  cat("Linearity calibration was not fitted. Status: ",
+      result$linearity_correction$reason %||% "not available", ".", sep = "")
+}
+```
+
+## Scale calibration
+
+The scale model is fit to standard means grouped by injection, then applied to
+the corrected sample peak data.
+
+```{r scale}
+scale_model <- result$scale_model
+if (!is.null(scale_model)) {
+  scale_info <- data.frame(
+    Metric = c("Measured delta column", "Reference delta column", "Slope", "Intercept", "R-squared", "Standard injections"),
+    Value = c(
+      scale_model$delta_column,
+      scale_model$reference_column,
+      scale_model$slope,
+      scale_model$intercept,
+      scale_model$r_squared,
+      scale_model$n_stds
+    )
+  )
+  knitr::kable(scale_info)
+  knitr::kable(scale_model$stds_data)
+} else {
+  cat("Scale calibration was not fitted. Status: ",
+      result$scale_correction$reason %||% "not available", ".", sep = "")
+}
+```
+
+## Exclusions
+
+```{r exclusions}
+exclusion_counts <- data.frame(
+  Exclusion = c("Name-filtered rows", "Analysis-number exclusions", "Peaks outside sample range"),
+  Rows = c(
+    nrow(result$excluded_data),
+    nrow(result$excluded_analyses),
+    nrow(result$excluded_peaks)
+  )
+)
+knitr::kable(exclusion_counts)
+```
+
+## Final processed data
+
+```{r output-preview}
+knitr::kable(utils::head(result$output, 20))
+```

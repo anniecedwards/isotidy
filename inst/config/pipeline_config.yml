@@ -128,7 +128,7 @@ gc_irms:
 gasbench_irms:
   name: "Gasbench IRMS"
   description: "High-throughput bulk isotope analysis"
-  data_shape: "sample_per_row"
+  data_shape: "peak_per_row"
   analysis_type: "bulk"
 
   column_mapping:
