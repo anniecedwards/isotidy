@@ -311,6 +311,7 @@ process_gc <- function(
     trimws(as.character(data$sample_id)) == external_standard_id
 
   derivatization_estimates <- data.frame()
+  nacme_correction_applied <- FALSE
   derivatization_role <- config$gc_standards$derivatization
   if (is.null(apply_nacme_correction)) {
     apply_nacme_correction <- config$processing$gc$apply_nacme_correction %||%
@@ -369,6 +370,7 @@ process_gc <- function(
       nacme_estimates = derivatization_estimates,
       sample_id = derivatization_sample_id
     )
+    nacme_correction_applied <- TRUE
   } else {
     data$is_derivatization_standard <- if (has_carbon_count_metadata &&
       !apply_nacme_correction && !is.null(derivatization_sample_id)) {
@@ -477,7 +479,11 @@ process_gc <- function(
       correction$missing_excluded_standard_compound_ids,
     injection_offsets = correction$injection_offsets,
     daily_offsets = correction$daily_offsets,
+    daily_reference_weights = correction$daily_reference_weights,
+    external_standard_measurements = correction$standard_measurements,
     derivatization_estimates = derivatization_estimates,
+    nacme_correction_applied = nacme_correction_applied,
+    apply_nacme_correction = apply_nacme_correction,
     derivatization_sample_id = derivatization_sample_id,
     derivatization_reference_id = derivatization_reference_id,
     external_standard_id = external_standard_id,

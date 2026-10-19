@@ -5,10 +5,10 @@ isotope_systems:
     name: "Carbon-13"
     element: "C"
     ratio: "13C/12C"
-    delta_name: "δ13C"
+    delta_name: "\u03B413C"
     reference_mass: 44
   N15:
     name: "Nitrogen-15"
     element: "N"
     ratio: "15N/14N"
-    delta_name: "δ15N"
+    delta_name: "\u03B415N"

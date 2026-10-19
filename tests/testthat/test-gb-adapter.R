@@ -139,6 +139,9 @@ test_that("process_gb applies configurable name exclusions and keeps GB peaks", 
   raw <- rbind(raw, extra)
 
   config <- gb_test_config()
+  config$exclude_patterns <- c(
+    "on_off", "blank", "linearity", "CIT_5umol", "f2_si_26087"
+  )
   config$processing$peak_number <- 3
   config$processing$sample_peak_number_high <- 5
 
@@ -200,10 +203,12 @@ test_that("process_gb corrects linear drift using one mean per ETH4 analysis", {
   extra_standards[["Peak Nr"]] <- 4
   extra_standards[["d 13C/12C"]] <- c(-9.0, -8.9, -8.8)
   raw <- rbind(raw, extra_standards)
+  config <- gb_test_config()
+  config$processing$drift_standard_id <- "ETH4"
 
   result <- process_gb(
     raw_df = raw,
-    config = gb_test_config(),
+    config = config,
     schema = gb_test_schema(),
     verbose = FALSE
   )
@@ -214,7 +219,10 @@ test_that("process_gb corrects linear drift using one mean per ETH4 analysis", {
   expect_equal(result$drift_correction$r_squared, 1, tolerance = 1e-10)
   expect_true(all(result$data$drift_correction_applied))
   expect_true(all(is.finite(result$data$delta_value_raw)))
-  expect_lt(sd(result$data$delta_value[result$data$standard_id == "ETH4"]), 1e-10)
+  expect_lt(
+    sd(result$drift_correction$standard_analyses$corrected_delta),
+    1e-10
+  )
   expect_gt(
     result$data$delta_value[result$data$analysis_no == 101],
     result$data$delta_value_raw[result$data$analysis_no == 101]

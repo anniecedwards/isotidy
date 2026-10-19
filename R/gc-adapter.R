@@ -582,7 +582,12 @@ correct_gc_external_standard <- function(
     ) |>
     dplyr::transmute(
       compound_id = as.character(.data$compound_id),
-      reference_delta = as.numeric(.data$delta_value)
+      reference_delta = as.numeric(.data$delta_value),
+      reference_uncertainty = if ("delta_uncertainty" %in% names(stds_reference_df)) {
+        as.numeric(.data$delta_uncertainty)
+      } else {
+        NA_real_
+      }
     )
 
   if (nrow(references) == 0) {
@@ -672,6 +677,41 @@ correct_gc_external_standard <- function(
       .groups = "drop"
     )
 
+  daily_reference_weights <- standard_measurements |>
+    dplyr::filter(
+      !is.na(.data$correction_date),
+      !is.na(.data$injection_id),
+      is.finite(.data$offset)
+    ) |>
+    dplyr::group_by(.data$correction_date, .data$injection_id) |>
+    dplyr::mutate(injection_weight = 1 / dplyr::n()) |>
+    dplyr::ungroup() |>
+    dplyr::group_by(.data$correction_date) |>
+    dplyr::mutate(
+      daily_weight = .data$injection_weight /
+        dplyr::n_distinct(.data$injection_id)
+    ) |>
+    dplyr::group_by(.data$correction_date, .data$compound_id) |>
+    dplyr::summarise(
+      reference_weight = sum(.data$daily_weight),
+      reference_delta = dplyr::first(.data$reference_delta),
+      reference_uncertainty = dplyr::first(.data$reference_uncertainty),
+      .groups = "drop"
+    )
+
+  daily_reference_uncertainty <- daily_reference_weights |>
+    dplyr::group_by(.data$correction_date) |>
+    dplyr::summarise(
+      reference_uncertainty = if (all(is.finite(.data$reference_uncertainty))) {
+        sqrt(sum((.data$reference_weight * .data$reference_uncertainty)^2))
+      } else {
+        NA_real_
+      },
+      .groups = "drop"
+    )
+  daily_offsets <- daily_offsets |>
+    dplyr::left_join(daily_reference_uncertainty, by = "correction_date")
+
   if (nrow(daily_offsets) == 0) {
     stop(
       "No usable compound matches were found for external standard '",
@@ -719,6 +759,8 @@ correct_gc_external_standard <- function(
     data = data,
     injection_offsets = injection_offsets,
     daily_offsets = daily_offsets,
+    daily_reference_weights = daily_reference_weights,
+    standard_measurements = standard_measurements,
     excluded_standard_injection_ids = excluded_standard_ids_found,
     missing_excluded_standard_injection_ids = excluded_standard_ids_missing,
     excluded_standard_compound_ids = excluded_standard_compounds_found,

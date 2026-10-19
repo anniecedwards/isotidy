@@ -8,7 +8,13 @@ test_that("package configuration files are available", {
 
   expect_true(
     file.exists(
-      file.path(config_dir, "experiment_config_TEMPLATE.yaml")
+      file.path(config_dir, "ea_experiment_config_TEMPLATE.yaml")
+    )
+  )
+
+  expect_true(
+    file.exists(
+      file.path(config_dir, "gc_experiment_config_TEMPLATE.yaml")
     )
   )
 

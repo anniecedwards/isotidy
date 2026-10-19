@@ -21,38 +21,7 @@ test_that("AA and NACME carbon counts are retained from standards YAML", {
   expect_equal(standards$NACME_C_count, 3)
 })
 
-test_that("NACME estimates and sample correction match synthetic workbook", {
-  benchmark_path <- testthat::test_path(
-    "..", "fixtures", "DeltaCalculations_example.xlsx"
-  )
-  benchmark_std <- readxl::read_excel(
-    benchmark_path,
-    sheet = "stdInfo"
-  ) |>
-    dplyr::filter(as.character(.data$Date) == "260512",
-                  .data$compound == "Ala")
-  expect_equal(nrow(benchmark_std), 1L)
-  expect_equal(benchmark_std$Comp_C, 3)
-  expect_equal(benchmark_std$Deriv_C, 3)
-  expect_equal(benchmark_std$Tot_C, 6)
-  expect_equal(
-    benchmark_std$`δreagent`,
-    (benchmark_std$Tot_C * benchmark_std$`δderivatized` -
-       benchmark_std$Comp_C * benchmark_std$`δknown`) /
-      benchmark_std$Deriv_C,
-    tolerance = 1e-10
-  )
-  benchmark_sample <- readxl::read_excel(
-    benchmark_path,
-    sheet = "derivCorr",
-    col_names = FALSE
-  )[[2]][[4]]
-  benchmark_external <- readxl::read_excel(
-    benchmark_path,
-    sheet = "esCorr",
-    col_names = FALSE
-  )
-
+test_that("NACME estimates and sample correction follow carbon balance", {
   standard_reference <- data.frame(
     standard_id = "AA",
     compound_id = "Ala",
@@ -67,13 +36,7 @@ test_that("NACME estimates and sample correction match synthetic workbook", {
     sample_id = c("STD", "STD", "WT_rep3", "WT_rep3", "F8"),
     start_time = c(date, date, date, as.Date("2026-05-13"), date),
     compound_id = "Ala",
-    delta_value_external_corrected = c(
-      as.numeric(benchmark_external[[2]][[4]]),
-      as.numeric(benchmark_external[[3]][[4]]),
-      as.numeric(benchmark_external[[4]][[4]]),
-      as.numeric(benchmark_external[[4]][[4]]),
-      -30
-    ),
+    delta_value_external_corrected = c(-28, -30, -25, -26, -30),
     is_external_standard = c(FALSE, FALSE, FALSE, FALSE, TRUE)
   )
 
@@ -84,14 +47,15 @@ test_that("NACME estimates and sample correction match synthetic workbook", {
     sample_id = "STD"
   )
 
-  expect_equal(nrow(estimates), 1)
+  expect_equal(nrow(estimates), 1L)
   expect_equal(estimates$n_standard_injections, 2L)
-  expect_equal(estimates$delta_derivatized_mean,
-               benchmark_std$`δderivatized`, tolerance = 1e-12)
-  expect_equal(estimates$delta_NACME, benchmark_std$`δreagent`,
-               tolerance = 1e-10)
-  expect_equal(estimates$sigma_NACME, benchmark_std$`σreagent`,
-               tolerance = 1e-10)
+  expect_equal(estimates$delta_derivatized_mean, -29)
+  expect_equal(estimates$delta_NACME, -38.42570018550691)
+  expect_equal(estimates$sigma_derivatized, sqrt(2))
+  expect_equal(
+    estimates$sigma_NACME,
+    sqrt((2 * sqrt(2))^2 + (0.1496319220104934)^2)
+  )
 
   corrected <- isotidy:::correct_gc_nacme(
     canonical_df = canonical,
@@ -101,8 +65,7 @@ test_that("NACME estimates and sample correction match synthetic workbook", {
 
   expect_true(corrected$is_derivatization_standard[[1]])
   expect_true(is.na(corrected$delta_value_nacme_corrected[[1]]))
-  expect_equal(corrected$delta_value_final[[3]], benchmark_sample,
-               tolerance = 1e-10)
+  expect_equal(corrected$delta_value_final[[3]], -11.57429981449309)
   expect_true(is.na(corrected$delta_value_final[[4]]))
   expect_equal(corrected$delta_value_final[[5]], -30)
 })

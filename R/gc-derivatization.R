@@ -76,7 +76,7 @@ estimate_gc_nacme <- function(
 
   references <- standards_reference_df |>
     dplyr::filter(
-      as.character(.data$standard_id) == as.character(standard_id),
+      as.character(.data$standard_id) == as.character(.env$standard_id),
       if (is.null(external_standard_reference_id)) {
         TRUE
       } else {
@@ -120,7 +120,7 @@ estimate_gc_nacme <- function(
   standard_rows <- nacme_input |>
     dplyr::filter(
       !is.na(.data$sample_id),
-      trimws(as.character(.data$sample_id)) == as.character(sample_id),
+      trimws(as.character(.data$sample_id)) == as.character(.env$sample_id),
       !is.na(.data[[compound_column]]),
       !is.na(.data[[date_column]]),
       is.finite(as.numeric(.data[[delta_column]])),
