@@ -123,7 +123,7 @@ if (is.null(excluded_standard_compounds) ||
 missing_standard_compounds <- result$missing_excluded_standard_compound_ids
 if (!is.null(missing_standard_compounds) &&
     length(missing_standard_compounds) > 0) {
-  cat("Configured excluded compound IDs not found in F8 measurements: ",
+  cat("Configured excluded compound IDs not found in external-standard measurements: ",
       paste(missing_standard_compounds, collapse = ", "), "\n", sep = "")
 }
 

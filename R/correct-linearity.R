@@ -9,8 +9,9 @@
 #' @param verbose Print progress and model summary (default: TRUE).
 #' @param create_plot Create a diagnostic plot (default: TRUE).
 #'
-#' @return List containing the model, slope, element, R², delta column,
-#'   number of standards, and diagnostic plot.
+#' @return List containing the model, coefficient covariance, residual degrees
+#'   of freedom, slope, element, R², delta column, number of standards, and
+#'   diagnostic plot.
 #'
 #' @details Uses delta_value_blank_corrected if available, otherwise delta_value.
 build_linearity_model <- function(
@@ -197,6 +198,8 @@ build_linearity_model <- function(
   return(
     list(
       model = model,
+      coefficient_covariance = regression$coefficient_covariance,
+      residual_degrees_freedom = regression$residual_degrees_freedom,
       slope = slope,
       intercept = intercept,
       element = config$element %||% "C",

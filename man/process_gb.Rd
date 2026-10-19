@@ -26,7 +26,7 @@ process_gb(
 \item{run_id}{Optional run identifier. Defaults to the experiment name.}
 \item{exclude_patterns}{Name patterns to exclude. Defaults to the GB patterns or config value.}
 \item{exclude_analysis_numbers}{Analysis numbers to exclude. Defaults to \code{config$processing$exclude_analysis_numbers} or none.}
-\item{drift_standard_id}{Standard used to estimate run drift. Defaults to \code{config$processing$drift_standard_id} or "ETH4".}
+\item{drift_standard_id}{Standard used to estimate run drift. Defaults to \code{config$processing$drift_standard_id}; no lab-specific default is used.}
 \item{apply_drift_correction}{Apply a linear analysis-number correction when at least three drift-standard analyses are available.}
 \item{apply_linearity}{Apply area-dependent linearity correction using the configured calibration standard and selected sample peak range.}
 \item{stds_reference_df}{Laboratory standards reference table. Defaults to \code{config$stds_reference_df}. Supplying it enables linearity and scale calibration; without it, those stages are reported as skipped.}

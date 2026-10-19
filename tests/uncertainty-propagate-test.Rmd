@@ -1,5 +1,5 @@
 ---
-title: "Uncertainty propagation test bed: scale correction"
+title: "Uncertainty propagation test bed"
 output: html_document
 ---
 
@@ -118,3 +118,199 @@ linear example, with small differences from simulation error. This example
 does not yet include reference-material uncertainty, calibration residual
 scatter, blank/drift/linearity corrections, or uncertainty in the plotted
 x-axis.
+
+## Synthetic correction-chain test bed
+
+The examples below extend the test bed to the corrections used by the
+pipelines. The data and uncertainty values are illustrative. EA blank
+correction, GB drift correction, and GC external-standard/NACME correction
+are kept as separate instrument paths; combining them into one chain would
+not describe an actual experiment. Each Monte Carlo iteration draws a shared
+calibration quantity once and applies it to every affected sample. It then
+fits the final plotted slope, so common calibration effects and covariance
+between plotted points are retained.
+
+```{r simulation-helper}
+# Draw jointly from a multivariate normal using only base R.
+draw_mvn <- function(n, mu, covariance) {
+  decomposition <- eigen(covariance, symmetric = TRUE)
+  if (any(decomposition$values < -1e-10)) {
+    stop("Covariance matrix is not positive semidefinite.")
+  }
+  roots <- decomposition$vectors %*%
+    diag(sqrt(pmax(decomposition$values, 0)), nrow = length(mu))
+  sweep(matrix(stats::rnorm(n * length(mu)), nrow = n) %*% t(roots),
+        2, mu, `+`)
+}
+
+summarize_slope_draws <- function(draws) {
+  stats::quantile(draws, c(0.025, 0.5, 0.975), na.rm = TRUE)
+}
+```
+
+### GC: shared date offsets and NACME correction
+
+This models the experiment's additive external-standard offset and the
+carbon-balance NACME correction. The external offset is shared by samples on
+the same date. The NACME estimate is shared by samples of the same compound
+and date. The example treats the supplied uncertainties as standard
+uncertainties; in a real run they should come from sequential standard
+injections and the reference-material certificate.
+
+```{r gc-offset-nacme}
+set.seed(20261020)
+n_mc <- 20000L
+
+gc_samples <- data.frame(
+  treatment = 1:6,
+  correction_date = rep(as.Date(c("2026-09-14", "2026-09-15")), each = 3),
+  compound_id = "AA1",
+  measured_mean = c(-19.2, -18.8, -18.3, -18.0, -17.7, -17.1),
+  u_measured_mean = rep(0.10, 6)
+)
+
+# Illustrative standard uncertainties for each shared calibration estimate.
+gc_daily_offset <- data.frame(
+  correction_date = as.Date(c("2026-09-14", "2026-09-15")),
+  mean = c(0.24, 0.31),
+  u = c(0.12, 0.20)
+)
+gc_nacme <- data.frame(
+  correction_date = as.Date(c("2026-09-14", "2026-09-15")),
+  compound_id = "AA1",
+  delta_derivatized_mean = c(-22.0, -21.7),
+  u_delta_derivatized_mean = c(0.30, 0.45),
+  AA_C_count = 6,
+  NACME_C_count = 1,
+  delta_known = -18.0,
+  u_delta_known = 0.15
+)
+
+gc_slope_draws <- replicate(n_mc, {
+  offset_draw <- stats::rnorm(nrow(gc_daily_offset),
+                              gc_daily_offset$mean, gc_daily_offset$u)
+  # The certified AA value is one shared input across both dates.
+  known_draw <- stats::rnorm(1, gc_nacme$delta_known[[1]],
+                             gc_nacme$u_delta_known[[1]])
+  derivatized_draw <- stats::rnorm(
+    nrow(gc_nacme), gc_nacme$delta_derivatized_mean,
+    gc_nacme$u_delta_derivatized_mean
+  )
+  total_C_cal <- gc_nacme$AA_C_count + gc_nacme$NACME_C_count
+  nacme_draw <- (total_C_cal * derivatized_draw -
+                   gc_nacme$AA_C_count * known_draw) /
+    gc_nacme$NACME_C_count
+  measured_draw <- stats::rnorm(nrow(gc_samples),
+                                gc_samples$measured_mean,
+                                gc_samples$u_measured_mean)
+
+  date_index <- match(gc_samples$correction_date,
+                      gc_daily_offset$correction_date)
+  nacme_index <- match(gc_samples$correction_date,
+                       gc_nacme$correction_date)
+  externally_corrected <- measured_draw + offset_draw[date_index]
+  total_C <- gc_nacme$AA_C_count[nacme_index] +
+    gc_nacme$NACME_C_count[nacme_index]
+  final_delta <- (total_C * externally_corrected -
+                    gc_nacme$NACME_C_count[nacme_index] *
+                    nacme_draw[nacme_index]) /
+    gc_nacme$AA_C_count[nacme_index]
+  unname(stats::coef(stats::lm(final_delta ~ gc_samples$treatment))[[2]])
+})
+
+summarize_slope_draws(gc_slope_draws)
+```
+
+### EA: blank area-subtraction correction
+
+For EA, blank area and blank isotope value enter the nonlinear correction
+formula. This example draws the blank means and the sample injection means,
+applies the correction, and refits the plotted slope in every iteration.
+Blank-mean uncertainties here use SD divided by square root of the blank
+count as a simple starting assumption; check that assumption against the
+actual blank sequence and any run structure.
+
+```{r ea-blank}
+set.seed(20261021)
+ea_samples <- data.frame(
+  treatment = 1:6,
+  area = c(900, 950, 1000, 1050, 1100, 1150),
+  measured_mean = c(-26.0, -24.8, -24.1, -22.9, -21.8, -20.9),
+  u_measured_mean = rep(0.12, 6)
+)
+blank_area <- 45
+blank_area_sd <- 6
+blank_delta <- -28.0
+blank_delta_sd <- 0.8
+n_blanks <- 8
+
+ea_slope_draws <- replicate(n_mc, {
+  area_blank_draw <- stats::rnorm(1, blank_area,
+                                  blank_area_sd / sqrt(n_blanks))
+  delta_blank_draw <- stats::rnorm(1, blank_delta,
+                                   blank_delta_sd / sqrt(n_blanks))
+  measured_draw <- stats::rnorm(nrow(ea_samples),
+                                ea_samples$measured_mean,
+                                ea_samples$u_measured_mean)
+  corrected <- (ea_samples$area * measured_draw -
+                  area_blank_draw * delta_blank_draw) /
+    (ea_samples$area - area_blank_draw)
+  unname(stats::coef(stats::lm(corrected ~ ea_samples$treatment))[[2]])
+})
+
+summarize_slope_draws(ea_slope_draws)
+```
+
+### GB: drift-model coefficient covariance
+
+The drift fit is based on one mean per standard analysis. Drawing its
+intercept and slope jointly from the fitted covariance matrix preserves their
+correlation. The fitted drift correction is shared by samples at the same
+analysis number. This example adds a sample-mean precision term and refits
+the final slope for each draw.
+
+```{r gb-drift}
+set.seed(20261022)
+drift_standards <- data.frame(
+  analysis_no = c(1, 4, 7, 10, 13, 16),
+  mean_delta = c(-21.1, -20.9, -20.8, -20.5, -20.4, -20.1)
+)
+drift_fit <- stats::lm(mean_delta ~ analysis_no, data = drift_standards)
+drift_coef_names <- c("(Intercept)", "analysis_no")
+drift_coef_mean <- stats::coef(drift_fit)[drift_coef_names]
+drift_coef_cov <- stats::vcov(drift_fit)[drift_coef_names, drift_coef_names]
+drift_reference_analysis <- mean(drift_standards$analysis_no)
+
+gb_samples <- data.frame(
+  treatment = 1:6,
+  analysis_no = c(2, 5, 8, 11, 14, 17),
+  measured_mean = c(-22.0, -21.5, -21.2, -20.6, -20.0, -19.7),
+  u_measured_mean = rep(0.10, 6)
+)
+
+gb_slope_draws <- replicate(n_mc, {
+  coef_draw <- setNames(
+    as.numeric(draw_mvn(1, drift_coef_mean, drift_coef_cov)[1, ]),
+    drift_coef_names
+  )
+  measured_draw <- stats::rnorm(nrow(gb_samples),
+                                gb_samples$measured_mean,
+                                gb_samples$u_measured_mean)
+  sample_fit <- coef_draw[["(Intercept)"]] +
+    coef_draw[["analysis_no"]] * gb_samples$analysis_no
+  reference_fit <- coef_draw[["(Intercept)"]] +
+    coef_draw[["analysis_no"]] * drift_reference_analysis
+  drift_corrected <- measured_draw - (sample_fit - reference_fit)
+  unname(stats::coef(stats::lm(drift_corrected ~ gb_samples$treatment))[[2]])
+})
+
+summarize_slope_draws(gb_slope_draws)
+```
+
+These examples estimate uncertainty on the *plotted slope*, not just on
+individual corrected values. They assume independent sample-mean errors and
+normal draws for the listed calibration quantities. In the next step, replace
+the illustrative inputs with the run's sequential control-standard means,
+reference uncertainties, blanks, and sample replicate summaries; then compare
+the Monte Carlo results against analytical propagation for cases where a
+closed-form result is available.

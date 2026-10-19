@@ -46,8 +46,10 @@ identify_blanks <- function(
 #' @return List containing:
 #'   - mean_area: mean area_or_voltage of blanks
 #'   - sd_area: standard deviation of blank area
+#'   - mean_area_uncertainty: standard uncertainty of the blank area mean
 #'   - mean_delta: mean delta_value of blanks
 #'   - sd_delta: standard deviation of blank delta
+#'   - mean_delta_uncertainty: standard uncertainty of the blank delta mean
 #'   - n_blanks: number of blanks used
 #'
 #' @details
@@ -111,23 +113,28 @@ calculate_blank_stats <- function(
   }
 
   # Stats use per-capsule normalized areas
+  valid_area <- is.finite(blank_df$normalized_area)
+  valid_delta <- is.finite(blank_df$delta_value)
+  n_area <- sum(valid_area)
+  n_delta <- sum(valid_delta)
+  sd_area <- stats::sd(blank_df$normalized_area[valid_area])
+  sd_delta <- stats::sd(blank_df$delta_value[valid_delta])
+
   blank_stats <- list(
     mean_area = mean(
       blank_df$normalized_area,
       na.rm = TRUE
     ),
-    sd_area = stats::sd(
-      blank_df$normalized_area,
-      na.rm = TRUE
-    ),
+    sd_area = sd_area,
+    mean_area_uncertainty = if (n_area > 1) sd_area / sqrt(n_area) else NA_real_,
+    n_area = n_area,
     mean_delta = mean(
       blank_df$delta_value,
       na.rm = TRUE
     ),
-    sd_delta = stats::sd(
-      blank_df$delta_value,
-      na.rm = TRUE
-    ),
+    sd_delta = sd_delta,
+    mean_delta_uncertainty = if (n_delta > 1) sd_delta / sqrt(n_delta) else NA_real_,
+    n_delta = n_delta,
     n_blanks = nrow(blank_df)
   )
 

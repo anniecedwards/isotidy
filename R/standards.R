@@ -311,6 +311,23 @@ load_lab_standards <- function(
   standards
 }
 
+# Restrict a supplied reference table to standards declared for this run.
+.filter_configured_standards <- function(stds_reference_df, config) {
+  if (!is.data.frame(stds_reference_df)) {
+    stop("'stds_reference_df' must be a data frame.")
+  }
+  if (is.null(config$stds_used) || !length(config$stds_used)) {
+    stop("Configuration must list standards in 'standards$used'.")
+  }
+  if (!"standard_id" %in% names(stds_reference_df)) {
+    stop("Standards reference data are missing the 'standard_id' column.")
+  }
+  stds_reference_df[
+    as.character(stds_reference_df$standard_id) %in% config$stds_used,
+    , drop = FALSE
+  ]
+}
+
 identify_standards <- function(df, standard_names, verbose = TRUE) {
 
   if (verbose) cat("Identifying standards\n")
@@ -378,6 +395,13 @@ extract_standards <- function(df, stds_reference_df, config = NULL, verbose = TR
 
   if (!is.data.frame(stds_reference_df)) {
     stop("stds_reference_df must be a dataframe")
+  }
+
+  if (!is.null(config)) {
+    stds_reference_df <- .filter_configured_standards(
+      stds_reference_df,
+      config
+    )
   }
 
   if (!"standard_id" %in% colnames(stds_reference_df)) {

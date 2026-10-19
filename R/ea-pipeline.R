@@ -4,7 +4,7 @@ process_ea <- function(
     raw_df,
     config,
     schema,
-    stds_reference_df,
+    stds_reference_df = NULL,
     isotope = "C13",
     run_id = NULL,
     instrument = "EA",
@@ -12,6 +12,14 @@ process_ea <- function(
     apply_linearity = TRUE,
     verbose = TRUE
 ) {
+
+  if (is.null(stds_reference_df)) {
+    stds_reference_df <- config$stds_reference_df
+  }
+  stds_reference_df <- .filter_configured_standards(
+    stds_reference_df,
+    config
+  )
 
   element <- get_config_element(config)
 

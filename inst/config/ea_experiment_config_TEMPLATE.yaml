@@ -19,17 +19,17 @@ experiment:
   description: "Bulk C isotope measurements"
 
 standards:
-  # Which standards were used in this run (must exist in EA_lab_stds.xlsx)
+  # List the standards used in this run. IDs must exist in the configured
+  # standards reference file (paths.stds_data_path).
   used:
-    - TTAS
-    - SERC0
-    - SERC1
+    - STANDARD_1
+    - STANDARD_2
 
   # Standard used for mass and linearity calibration of each element.
   # The same standard is measured at multiple sample masses.
   # Format: ELEMENT: STANDARD_NAME
   calibration_standards:
-    C: SERC0
+    C: STANDARD_1
 
 processing:
   # Element being processed in this experiment
@@ -45,7 +45,7 @@ paths:
   # Leave these as NULL to use default structure:
   # - raw_data_dir: data/{experiment.name}/raw_data/
   # - output_dir: data/{experiment.name}/analyzed_data/
-  # - stds_data_path: inst/config/lab_standards.yml
+  # - stds_data_path: standards/lab_standards.yml (relative to this file)
   #
   # Only fill these in if your structure is non-standard:
 
@@ -60,7 +60,7 @@ notes: |
   For example:
     - Instrument was recalibrated on 2026-05-01
     - Sample set 1-5 had higher noise due to weather
-    - TTAS standard ran as quality check only
+    - Describe any standards used for quality control
 
 # Additional metadata (optional, for your records)
 

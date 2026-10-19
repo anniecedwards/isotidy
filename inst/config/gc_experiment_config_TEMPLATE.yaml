@@ -18,14 +18,14 @@ experiment:
 
 standards:
   used:
-    - F8
+    - EXTERNAL_STANDARD
   gc:
     external:
-      sample_id: F8
-      reference_id: F8
+      sample_id: EXTERNAL_STANDARD
+      reference_id: EXTERNAL_STANDARD
       # Injection IDs omitted from both the per-injection and daily offsets.
       exclude_injection_ids: []
-      # Compound IDs omitted from all F8 offset averages, e.g. [C20M].
+      # Compound IDs omitted from all external-standard offset averages.
       exclude_compound_ids: []
 
 processing:
@@ -40,6 +40,9 @@ processing:
     - "blank"
 
   gc:
+    # Apply the NACME derivative correction for NACME-derivatized compounds.
+    # Set false for compounds prepared without NACME.
+    apply_nacme_correction: true
     # Manually selected measurements excluded before standard correction.
     # Use one mapping per analysis; omit peak_number to exclude all peaks in
     # that analysis. These exclusions apply to sample and standard rows.
@@ -53,7 +56,7 @@ paths:
   # Leave these as NULL to use default structure:
   # - raw_data_dir: data/{experiment.name}/raw_data/
   # - output_dir: data/{experiment.name}/analyzed_data/
-  # - stds_data_path: inst/config/lab_standards.yml
+  # - stds_data_path: standards/lab_standards.yml (relative to this file)
   #
   # Only fill these in if your structure is non-standard:
 
@@ -67,7 +70,7 @@ notes: |
   For example:
     - Instrument was recalibrated on 2026-05-01
     - Sample set 1-5 had higher noise due to weather
-    - TTAS standard ran as quality check only
+    - Describe any standards used for quality control
 
 
 metadata:

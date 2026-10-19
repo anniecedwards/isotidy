@@ -4,12 +4,19 @@
 \alias{load_IRMS_config}
 \title{Load IRMS experimental configuration}
 \usage{
-load_IRMS_config(yaml_file_path, stds_reference_df = NULL, verbose = TRUE)
+load_IRMS_config(
+  yaml_file_path,
+  lab_config_dir = NULL,
+  stds_reference_df = NULL,
+  verbose = TRUE
+)
 }
 \arguments{
 \item{yaml_file_path}{Path to the experiment configuration YAML file.}
 
-\item{stds_reference_df}{Optional pre-loaded laboratory standards table.}
+\item{lab_config_dir}{Optional directory containing \code{lab_standards.yml}. Prefer \code{paths$stds_data_path} in the experiment YAML for portability.}
+
+\item{stds_reference_df}{Deprecated optional pre-loaded standards table; rows not listed in \code{standards$used} are discarded.}
 
 \item{verbose}{Print loading information.}
 }

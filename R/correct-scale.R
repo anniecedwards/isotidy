@@ -22,6 +22,8 @@
 #'
 #' @return List containing:
 #'   - model: lm object (linear regression)
+#'   - coefficient_covariance: joint covariance matrix for fitted coefficients
+#'   - residual_degrees_freedom: residual degrees of freedom
 #'   - slope: scale calibration slope
 #'   - intercept: scale calibration intercept
 #'   - r_squared: R² (model fit quality)
@@ -149,6 +151,8 @@ build_scale_model <- function(
   return(
     list(
       model = model,
+      coefficient_covariance = regression$coefficient_covariance,
+      residual_degrees_freedom = regression$residual_degrees_freedom,
       slope = slope,
       intercept = intercept,
       r_squared = r_squared,

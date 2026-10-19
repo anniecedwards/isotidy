@@ -6,8 +6,10 @@
 #' the canonical `irms_config` structure used by the processing pipeline.
 #'
 #' @param yaml_file_path Path to the experiment configuration YAML file.
-#' @param lab_config_dir Directory containing laboratory configuration files.
-#' @param stds_reference_df Optional pre-loaded laboratory standards table.
+#' @param lab_config_dir Optional directory containing `lab_standards.yml`.
+#'   Prefer `paths$stds_data_path` in the experiment YAML for portability.
+#' @param stds_reference_df Deprecated optional pre-loaded standards table;
+#'   rows not listed in `standards$used` are discarded.
 #' @param verbose Print loading information.
 #' @return An object of class `irms_config`.
 #' @export
@@ -232,6 +234,14 @@ load_IRMS_config <- function(
       lab_config_dir,
       "lab_standards.yml"
     )
+  } else if (!grepl("^(?:[A-Za-z]:[/\\\\]|/)", stds_data_path)) {
+    relative_to_experiment <- file.path(
+      dirname(normalizePath(yaml_file_path)),
+      stds_data_path
+    )
+    if (file.exists(relative_to_experiment)) {
+      stds_data_path <- relative_to_experiment
+    }
   }
 
   # Load laboratory standards
@@ -239,7 +249,13 @@ load_IRMS_config <- function(
 
     stds_reference_df <- load_lab_standards(
       path = stds_data_path,
+      standard_ids = stds_used,
       verbose = FALSE
+    )
+  } else {
+    stds_reference_df <- .filter_configured_standards(
+      stds_reference_df,
+      list(stds_used = stds_used)
     )
   }
 

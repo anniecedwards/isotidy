@@ -94,8 +94,9 @@ prepare_mass_standards <- function(
 #' @param verbose Print progress and model summary.
 #' @param create_plot Create diagnostic plot.
 #'
-#' @return List containing the fitted model, coefficients, statistics,
-#'   calibration standard, and optional diagnostic plot.
+#' @return List containing the fitted model, coefficient covariance, residual
+#'   degrees of freedom, coefficients, statistics, calibration standard, and
+#'   optional diagnostic plot.
 #'
 build_mass_model <- function(
     stds_df,
@@ -357,6 +358,8 @@ build_mass_model <- function(
   return(
     list(
       model = model,
+      coefficient_covariance = regression$coefficient_covariance,
+      residual_degrees_freedom = regression$residual_degrees_freedom,
       slope = slope,
       intercept = intercept,
       element = element,

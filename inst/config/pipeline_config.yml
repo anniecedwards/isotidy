@@ -63,7 +63,6 @@ ea_irms:
   # Metadata and calibration
   metadata:
     use_standards_database: true
-    standards_db_path: "scripts/inst/config/lab_standards.yml"
     standards_match_column: "identifier"
     blank_identifier_pattern: "Blank"
 

@@ -176,6 +176,9 @@
 #' @param manual_peak_assignments Optional data frame with analysis_no, peak_number, and compound_id columns.
 #' @param derivatization_sample_id Optional sample label for AA mix injections.
 #'   Defaults to the AA mix reference standard ID.
+#' @param apply_nacme_correction Apply the NACME derivative correction when
+#'   carbon-count metadata is available. Defaults to
+#'   `config$processing$gc$apply_nacme_correction`, or `TRUE` when unset.
 #' @param external_standard_id Optional sample ID for the external-standard
 #'   injections. Defaults to config$gc_standards$external$sample_id.
 #' @param external_reference_id Optional laboratory reference ID. Defaults to
@@ -212,7 +215,8 @@ process_gc <- function(
     exclude_measurements = NULL,
     exclude_standard_compound_ids = NULL,
     manual_peak_assignments = NULL,
-    derivatization_sample_id = NULL
+    derivatization_sample_id = NULL,
+    apply_nacme_correction = NULL
 ) {
   if (is.null(stds_reference_df)) {
     stds_reference_df <- config$stds_reference_df
@@ -221,6 +225,10 @@ process_gc <- function(
   if (!is.data.frame(stds_reference_df)) {
     stop("'stds_reference_df' must be a data frame.")
   }
+  stds_reference_df <- .filter_configured_standards(
+    stds_reference_df,
+    config
+  )
 
   external_role <- config$gc_standards$external
 
@@ -304,6 +312,15 @@ process_gc <- function(
 
   derivatization_estimates <- data.frame()
   derivatization_role <- config$gc_standards$derivatization
+  if (is.null(apply_nacme_correction)) {
+    apply_nacme_correction <- config$processing$gc$apply_nacme_correction %||%
+      TRUE
+  }
+  if (!is.logical(apply_nacme_correction) ||
+      length(apply_nacme_correction) != 1 || is.na(apply_nacme_correction)) {
+    stop("'apply_nacme_correction' must be TRUE or FALSE.")
+  }
+  apply_nacme_correction <- isTRUE(apply_nacme_correction)
   if (is.null(derivatization_sample_id)) {
     derivatization_sample_id <- derivatization_role$sample_id
   }
@@ -316,7 +333,7 @@ process_gc <- function(
     any(is.finite(as.numeric(stds_reference_df$AA_C_count)) &
       is.finite(as.numeric(stds_reference_df$NACME_C_count)))
 
-  if (has_carbon_count_metadata) {
+  if (has_carbon_count_metadata && apply_nacme_correction) {
     count_standard_ids <- unique(as.character(stds_reference_df$standard_id[
       is.finite(as.numeric(stds_reference_df$AA_C_count)) &
         is.finite(as.numeric(stds_reference_df$NACME_C_count))
@@ -353,7 +370,13 @@ process_gc <- function(
       sample_id = derivatization_sample_id
     )
   } else {
-    data$is_derivatization_standard <- FALSE
+    data$is_derivatization_standard <- if (has_carbon_count_metadata &&
+      !apply_nacme_correction && !is.null(derivatization_sample_id)) {
+        !is.na(data$sample_id) &
+          trimws(as.character(data$sample_id)) == derivatization_sample_id
+      } else {
+        FALSE
+      }
     data$delta_value_nacme_corrected <- NA_real_
     data$delta_NACME <- NA_real_
     data$sigma_NACME <- NA_real_

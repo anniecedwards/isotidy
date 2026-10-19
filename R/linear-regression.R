@@ -16,10 +16,13 @@
   )
   model_summary <- summary(model)
   coefficients <- stats::coef(model)
+  coefficient_covariance <- stats::vcov(model)
   coefficient_summary <- model_summary$coefficients
 
   list(
     model = model,
+    coefficient_covariance = coefficient_covariance,
+    residual_degrees_freedom = stats::df.residual(model),
     slope = unname(coefficients[[predictor]]),
     intercept = unname(coefficients[["(Intercept)"]]),
     r_squared = model_summary$r.squared,

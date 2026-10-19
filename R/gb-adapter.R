@@ -3,7 +3,7 @@
 #' Adapt raw GB-IRMS data to the canonical format
 #'
 #' Maps one row per exported peak into the canonical IRMS format. Labels
-#' beginning with a configured standard ID (for example, NaHCO3_1umol) are
+#' beginning with a configured standard ID (for example, STANDARD_1_1umol) are
 #' assigned that base ID for existing standards utilities. The full raw label
 #' and the suffix are retained in raw_sample_id and standard_variant.
 #'

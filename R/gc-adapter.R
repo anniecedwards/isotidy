@@ -659,6 +659,16 @@ correct_gc_external_standard <- function(
     dplyr::summarise(
       delta_offset = mean(.data$delta_offset),
       n_injections = dplyr::n(),
+      sd_injection_offset = if (dplyr::n() > 1) {
+        stats::sd(.data$delta_offset)
+      } else {
+        NA_real_
+      },
+      standard_uncertainty = if (dplyr::n() > 1) {
+        stats::sd(.data$delta_offset) / sqrt(dplyr::n())
+      } else {
+        NA_real_
+      },
       .groups = "drop"
     )
 

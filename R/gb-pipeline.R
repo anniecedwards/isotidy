@@ -16,7 +16,7 @@
 #' @param exclude_analysis_numbers Analysis numbers to exclude. If NULL, uses
 #'   config$processing$exclude_analysis_numbers or excludes none.
 #' @param drift_standard_id Standard used to estimate run drift. Defaults to
-#'   config$processing$drift_standard_id or "ETH4".
+#'   config$processing$drift_standard_id. No lab-specific default is used.
 #' @param apply_drift_correction Apply a linear analysis-number correction
 #'   when at least three drift-standard analyses are available.
 #' @param apply_linearity Apply area-dependent linearity correction using the
@@ -48,13 +48,19 @@ process_gb <- function(
   if (is.null(config)) stop("An experiment config is required.")
 
   if (is.null(drift_standard_id)) {
-    drift_standard_id <- config$processing$drift_standard_id %||% "ETH4"
+    drift_standard_id <- config$processing$drift_standard_id
   }
-  if (length(drift_standard_id) != 1L || is.na(drift_standard_id) ||
-      !nzchar(as.character(drift_standard_id))) {
-    stop("'drift_standard_id' must be one non-empty standard ID.")
+  if (!is.null(drift_standard_id) &&
+      (length(drift_standard_id) != 1L || is.na(drift_standard_id) ||
+       !nzchar(as.character(drift_standard_id)))) {
+    stop("'drift_standard_id' must be NULL or one non-empty standard ID.")
   }
-  drift_standard_id <- as.character(drift_standard_id)
+  if (!is.null(drift_standard_id)) {
+    drift_standard_id <- as.character(drift_standard_id)
+    if (!drift_standard_id %in% config$stds_used) {
+      stop("The drift standard must be listed in standards$used.")
+    }
+  }
   if (!is.logical(apply_drift_correction) || length(apply_drift_correction) != 1L ||
       is.na(apply_drift_correction)) {
     stop("'apply_drift_correction' must be TRUE or FALSE.")
@@ -64,6 +70,12 @@ process_gb <- function(
     stop("'apply_linearity' must be TRUE or FALSE.")
   }
   if (is.null(stds_reference_df)) stds_reference_df <- config$stds_reference_df
+  if (!is.null(stds_reference_df)) {
+    stds_reference_df <- .filter_configured_standards(
+      stds_reference_df,
+      config
+    )
+  }
 
   if (is.null(exclude_analysis_numbers)) {
     exclude_analysis_numbers <- config$processing$exclude_analysis_numbers %||%
@@ -217,7 +229,13 @@ process_gb <- function(
   )
   drift_correction <- list(
     applied = FALSE,
-    reason = if (apply_drift_correction) "not enough reference analyses" else "disabled",
+    reason = if (!apply_drift_correction) {
+      "disabled"
+    } else if (is.null(drift_standard_id)) {
+      "no drift standard configured"
+    } else {
+      "not enough reference analyses"
+    },
     standard_id = drift_standard_id,
     n_standard_analyses = 0L,
     extrapolated_rows = 0L,
@@ -228,10 +246,12 @@ process_gb <- function(
     r_squared = NA_real_,
     slope_p_value = NA_real_,
     residual_sd = NA_real_,
+    model = NULL,
+    coefficient_covariance = NULL,
     standard_analyses = drift_analysis
   )
 
-  if (apply_drift_correction) {
+  if (apply_drift_correction && !is.null(drift_standard_id)) {
     drift_rows <- sample_data[
       !is.na(sample_data$standard_id) &
         sample_data$standard_id == drift_standard_id &
@@ -299,6 +319,9 @@ process_gb <- function(
       drift_correction$r_squared <- drift_model$r_squared
       drift_correction$slope_p_value <- drift_model$slope_p_value
       drift_correction$residual_sd <- drift_model$residual_std_error
+      drift_correction$model <- drift_model$model
+      drift_correction$coefficient_covariance <-
+        drift_model$coefficient_covariance
       drift_correction$extrapolated_rows <- sum(sample_data$drift_extrapolated)
     }
   }
