@@ -3,9 +3,8 @@
 #' Save processed GC results and a processing summary
 #'
 #' Writes final corrected GC peak data, optional replicate-averaged
-#' visualization data, excluded measurements, injection-level and daily
-#' external-standard offsets, optional NACME estimates, and an HTML processing
-#' summary.
+#' visualization data, exclusions, external-standard offsets, optional NACME
+#' estimates, and an HTML processing summary.
 #'
 #' @param result Result returned by process_gc().
 #' @param config Experiment configuration used for processing.
@@ -23,182 +22,39 @@ save_gc_results <- function(
     prefix = NULL,
     verbose = TRUE
 ) {
-  if (!is.list(result) || is.null(result$output)) {
-    stop("'result' must be the list returned by process_gc().")
-  }
-
-  if (!is.list(config)) {
-    stop("'config' must be the experiment configuration used by process_gc().")
-  }
-
-  if (
-    length(output_dir) != 1 ||
-    is.na(output_dir) ||
-    !nzchar(output_dir)
-  ) {
-    stop("'output_dir' must contain one non-empty path.")
-  }
-
-  if (is.null(prefix)) {
-    prefix <- config$file_name
-  }
-
-  if (
-    length(prefix) != 1 ||
-    is.na(prefix) ||
-    !nzchar(prefix)
-  ) {
+  .validate_peripheral_save_inputs(result, config, output_dir)
+  if (is.null(prefix)) prefix <- config$file_name
+  if (is.null(prefix) || is.na(prefix) || !nzchar(prefix)) {
     stop("Supply a non-empty 'prefix' or config$file_name.")
   }
 
-  prefix <- gsub("[^A-Za-z0-9._-]+", "_", as.character(prefix))
-  dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+  derivatization_estimates <- result$derivatization_estimates
+  derivatization_estimates <- if (
+    is.data.frame(derivatization_estimates) && nrow(derivatization_estimates) > 0
+  ) derivatization_estimates else NULL
 
-  data_file <- file.path(output_dir, paste0(prefix, "_gc_processed.csv"))
-  visualization_file <- NULL
-  if (!is.null(result$visualization_data)) {
-    visualization_file <- file.path(
-      output_dir,
-      paste0(prefix, "_gc_visualization.csv")
-    )
-  }
-  injection_offsets_file <- file.path(
-    output_dir,
-    paste0(prefix, "_gc_injection_offsets.csv")
-  )
-  daily_offsets_file <- file.path(
-    output_dir,
-    paste0(prefix, "_gc_daily_offsets.csv")
-  )
-  derivatization_estimates_file <- NULL
-  if (
-    is.data.frame(result$derivatization_estimates) &&
-    nrow(result$derivatization_estimates) > 0
-  ) {
-    derivatization_estimates_file <- file.path(
-      output_dir,
-      paste0(prefix, "_gc_nacme_estimates.csv")
-    )
-  }
-  excluded_measurements_file <- NULL
-  if (!is.null(result$excluded_measurements)) {
-    excluded_measurements_file <- file.path(
-      output_dir,
-      paste0(prefix, "_gc_excluded_measurements.csv")
-    )
-  }
-  report_file <- file.path(
-    output_dir,
-    paste0(prefix, "_gc_processing_summary.html")
+  outputs <- list(
+    data_file = list(data = result$output, suffix = "processed"),
+    visualization_file = list(data = result$visualization_data, suffix = "visualization"),
+    injection_offsets_file = list(data = result$injection_offsets, suffix = "injection_offsets"),
+    daily_offsets_file = list(data = result$daily_offsets, suffix = "daily_offsets"),
+    derivatization_estimates_file = list(data = derivatization_estimates, suffix = "nacme_estimates"),
+    excluded_measurements_file = list(data = result$excluded_measurements, suffix = "excluded_measurements")
   )
 
-  utils::write.csv(result$output, data_file, row.names = FALSE)
-  if (!is.null(visualization_file)) {
-    utils::write.csv(result$visualization_data, visualization_file, row.names = FALSE)
-  }
-  utils::write.csv(result$injection_offsets, injection_offsets_file, row.names = FALSE)
-  utils::write.csv(result$daily_offsets, daily_offsets_file, row.names = FALSE)
-  if (!is.null(derivatization_estimates_file)) {
-    utils::write.csv(
-      result$derivatization_estimates,
-      derivatization_estimates_file,
-      row.names = FALSE
-    )
-  }
-  if (!is.null(excluded_measurements_file)) {
-    utils::write.csv(
-      result$excluded_measurements,
-      excluded_measurements_file,
-      row.names = FALSE
-    )
-  }
-
-  if (!requireNamespace("rmarkdown", quietly = TRUE)) {
-    stop(
-      "The 'rmarkdown' package is required to create the HTML report. ",
-      "Install it with install.packages('rmarkdown')."
-    )
-  }
-
-  development_template <- file.path(
-    "inst",
-    "reports",
-    "GC_processing_summary.Rmd"
-  )
-  template <- if (file.exists(development_template)) {
-    normalizePath(development_template, winslash = "/", mustWork = TRUE)
-  } else {
-    system.file(
-      "reports",
-      "GC_processing_summary.Rmd",
-      package = "isotidy"
-    )
-  }
-
-  if (!nzchar(template) || !file.exists(template)) {
-    stop(
-      "Could not find the GC processing report template. ",
-      "Expected: inst/reports/GC_processing_summary.Rmd"
-    )
-  }
-
-  rmarkdown::render(
-    input = template,
-    output_file = basename(report_file),
+  invisible(.save_peripheral_results(
+    result = result,
+    config = config,
     output_dir = output_dir,
-    params = list(
-      result = result,
-      config = config,
-      data_file = data_file,
-      injection_offsets_file = injection_offsets_file,
-      daily_offsets_file = daily_offsets_file,
-      excluded_measurements_file = excluded_measurements_file
+    prefix = prefix,
+    peripheral = "GC",
+    outputs = outputs,
+    report_params = c(
+      "data_file", "injection_offsets_file", "daily_offsets_file",
+      "excluded_measurements_file"
     ),
-    envir = new.env(parent = globalenv()),
-    quiet = !verbose
-  )
-
-  if (verbose) {
-    message("Saved GC results to ", normalizePath(output_dir, winslash = "/", mustWork = FALSE))
-  }
-
-  invisible(list(
-    data_file = normalizePath(data_file, winslash = "/", mustWork = FALSE),
-    visualization_file = if (is.null(visualization_file)) {
-      NULL
-    } else {
-      normalizePath(visualization_file, winslash = "/", mustWork = FALSE)
-    },
-    injection_offsets_file = normalizePath(
-      injection_offsets_file,
-      winslash = "/",
-      mustWork = FALSE
-    ),
-    daily_offsets_file = normalizePath(
-      daily_offsets_file,
-      winslash = "/",
-      mustWork = FALSE
-    ),
-    derivatization_estimates_file = if (
-      is.null(derivatization_estimates_file)
-    ) {
-      NULL
-    } else {
-      normalizePath(
-        derivatization_estimates_file,
-        winslash = "/",
-        mustWork = FALSE
-      )
-    },
-    excluded_measurements_file = if (is.null(excluded_measurements_file)) {
-      NULL
-    } else {
-      normalizePath(
-        excluded_measurements_file,
-        winslash = "/",
-        mustWork = FALSE
-      )
-    },
-    report_file = normalizePath(report_file, winslash = "/", mustWork = FALSE)
+    development_template = file.path("inst", "reports", "GC_processing_summary.Rmd"),
+    package_template = "GC_processing_summary.Rmd",
+    verbose = verbose
   ))
 }

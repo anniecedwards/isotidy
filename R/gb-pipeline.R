@@ -263,7 +263,12 @@ process_gb <- function(
     drift_correction$standard_analyses <- drift_analysis
 
     if (nrow(drift_analysis) >= 3L && length(unique(drift_analysis$analysis_no)) >= 3L) {
-      drift_fit <- stats::lm(mean_delta ~ analysis_no, data = drift_analysis)
+      drift_regression <- .fit_linear_regression(
+        data = drift_analysis,
+        response = "mean_delta",
+        predictor = "analysis_no"
+      )
+      drift_fit <- drift_regression$model
       reference_delta <- mean(stats::fitted(drift_fit))
       drift_analysis$fitted_delta <- stats::fitted(drift_fit)
       drift_analysis$drift_offset <- drift_analysis$fitted_delta - reference_delta
@@ -293,14 +298,11 @@ process_gb <- function(
       drift_correction$applied <- any(correctable)
       drift_correction$reason <- if (any(correctable)) "applied" else "no numeric sample analysis numbers"
       drift_correction$reference_delta <- reference_delta
-      drift_correction$slope_per_analysis <- unname(stats::coef(drift_fit)[["analysis_no"]])
-      drift_correction$intercept <- unname(stats::coef(drift_fit)[["(Intercept)"]])
-      drift_fit_summary <- summary(drift_fit)
-      drift_correction$r_squared <- drift_fit_summary$r.squared
-      drift_correction$slope_p_value <- drift_fit_summary$coefficients[
-        "analysis_no", "Pr(>|t|)"
-      ]
-      drift_correction$residual_sd <- drift_fit_summary$sigma
+      drift_correction$slope_per_analysis <- drift_regression$slope
+      drift_correction$intercept <- drift_regression$intercept
+      drift_correction$r_squared <- drift_regression$r_squared
+      drift_correction$slope_p_value <- drift_regression$slope_p_value
+      drift_correction$residual_sd <- drift_regression$residual_std_error
       drift_correction$extrapolated_rows <- sum(sample_data$drift_extrapolated)
     }
   }
@@ -386,7 +388,8 @@ process_gb <- function(
   )
   output <- prepare_output(
     df = sample_data,
-    output_cols = intersect(output_columns, names(sample_data)),
+    output_cols = output_columns,
+    keep_available = TRUE,
     verbose = verbose
   )
   visualization_column <- if ("delta_value_final" %in% names(sample_data)) {

@@ -4,7 +4,7 @@
 \alias{prepare_output}
 \title{Prepare output dataframe with final corrected values}
 \usage{
-prepare_output(df, output_cols = NULL, verbose = TRUE)
+prepare_output(df, output_cols = NULL, verbose = TRUE, keep_available = FALSE)
 }
 \arguments{
 \item{df}{Fully corrected data dataframe
@@ -13,6 +13,9 @@ Should have all correction columns: delta_value_final, etc.}
 \item{output_cols}{Character vector of columns to include in output
 If NULL, uses defaults: run_id, sample_id, element, delta_value_final, amount
 You can specify any columns that exist in df}
+
+\item{keep_available}{If TRUE, omit requested columns that are absent from
+df. If FALSE, missing requested columns raise an error.}
 
 \item{verbose}{Print progress (default: TRUE)}
 }

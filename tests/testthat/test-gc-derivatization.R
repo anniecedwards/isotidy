@@ -31,6 +31,17 @@ test_that("NACME estimates and sample correction match synthetic workbook", {
   ) |>
     dplyr::filter(as.character(.data$Date) == "260512",
                   .data$compound == "Ala")
+  expect_equal(nrow(benchmark_std), 1L)
+  expect_equal(benchmark_std$Comp_C, 3)
+  expect_equal(benchmark_std$Deriv_C, 3)
+  expect_equal(benchmark_std$Tot_C, 6)
+  expect_equal(
+    benchmark_std$`δreagent`,
+    (benchmark_std$Tot_C * benchmark_std$`δderivatized` -
+       benchmark_std$Comp_C * benchmark_std$`δknown`) /
+      benchmark_std$Deriv_C,
+    tolerance = 1e-10
+  )
   benchmark_sample <- readxl::read_excel(
     benchmark_path,
     sheet = "derivCorr",

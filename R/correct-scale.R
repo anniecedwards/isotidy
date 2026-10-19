@@ -97,29 +97,17 @@ build_scale_model <- function(
     cat("  Standards used:", nrow(model_df), "\n")
   }
 
-  # Regress reference delta on measured delta
-  formula <- stats::as.formula(
-    paste(
-      reference_column,
-      "~",
-      delta_column
-    )
+  # Regress reference delta on measured delta.
+  regression <- .fit_linear_regression(
+    data = model_df,
+    response = reference_column,
+    predictor = delta_column
   )
-
-  model <- stats::lm(
-    formula,
-    data = model_df
-  )
-
-  summary_coefs <- summary(model)$coefficients
-
-  slope <- summary_coefs[delta_column, "Estimate"]
-  intercept <- summary_coefs["(Intercept)", "Estimate"]
-
-  model_summary <- summary(model)
-
-  r_squared <- model_summary$r.squared
-  rse <- model_summary$sigma
+  model <- regression$model
+  slope <- regression$slope
+  intercept <- regression$intercept
+  r_squared <- regression$r_squared
+  rse <- regression$residual_std_error
 
   if (verbose) {
     cat("  Slope:", round(slope, 6), "\n")

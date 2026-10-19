@@ -27,23 +27,6 @@ gc_methods_path <- normalizePath(
   winslash = "/",
   mustWork = TRUE
 )
-fixture_root_candidates <- c(".", "..", "../..", "../../..")
-fixture_root_matches <- fixture_root_candidates[vapply(
-  fixture_root_candidates,
-  function(root) file.exists(file.path(
-    root, "tests", "fixtures", "DeltaCalculations_example.xlsx"
-  )),
-  logical(1)
-)]
-if (length(fixture_root_matches) == 0) {
-  stop("Could not locate the synthetic derivatization reference workbook.")
-}
-synthetic_reference_path <- normalizePath(
-  file.path(fixture_root_matches[[1]], "tests", "fixtures", "DeltaCalculations_example.xlsx"),
-  winslash = "/",
-  mustWork = TRUE
-)
-
 config <- load_IRMS_config(config_path, lab_config_dir)
 raw_gc <- load_gc_data(config)
 external_standard_id <- "F8"
@@ -117,30 +100,6 @@ f8_assignments <- gc_result$data |>
 f8_assignments
 ```
 
-## Save corrected GC data
-
-The processed data retain the raw, externally corrected, and NACME-corrected
-values. AA mix injections are used to estimate the correction but are omitted
-from final sample output. Separate CSV files retain external offsets and the
-date/compound NACME estimates.
-
-```{r save-gc}
-gc_saved <- save_gc_results(
-  result = gc_result,
-  config = config,
-  output_dir = file.path(project_root, config$output_dir),
-  prefix = config$file_name,
-  verbose = TRUE
-)
-stopifnot(file.exists(gc_saved$data_file))
-stopifnot(file.exists(gc_saved$visualization_file))
-stopifnot(file.exists(gc_saved$excluded_measurements_file))
-stopifnot(file.exists(gc_saved$injection_offsets_file))
-stopifnot(file.exists(gc_saved$daily_offsets_file))
-stopifnot(file.exists(gc_saved$derivatization_estimates_file))
-gc_saved
-```
-
 ## NACME correction target
 
 The correction starts from F8 externally corrected values. For each compound and
@@ -187,57 +146,8 @@ compound estimate exists, and leave unmatched or ambiguous peaks unassigned for
 review. Resolve the AA mix sample label from the actual exports rather than
 assuming it is literally named `STD`.
 
-## Synthetic derivatization reference workbook
-
-`DeltaCalculations_example.xlsx` is checked in as a small synthetic benchmark. It
-contains the original wide-format measurements and the labmate's intermediate
-and corrected tables. It is a reference for checking calculations, not an
-instrument export to pass to `process_gc()`.
-
-The `stdInfo` sheet provides per-date, per-compound STD means and the empirical
-NACME estimates. The benchmark groups by calendar date, treating same-day standards and samples as sharing a derivatization batch. The `derivCorr` sheet contains the sample values after the
-NACME correction. Use these stages as numerical regression references. The
-workbook's `isCorr` sheet applies a separate
-NorLeu internal-standard adjustment; exclude that step when validating the
-F8 external and NACME derivatization corrections alone. The reference workbook
-uses more precise known AA values than the current two-decimal standards YAML,
-so numerical comparisons
-must use the same source precision or an explicit rounding tolerance.
-
-```{r synthetic-reference-check}
-synthetic_std_reference <- readxl::read_excel(
-  synthetic_reference_path,
-  sheet = "stdInfo"
-)
-synthetic_ala <- synthetic_std_reference |>
-  dplyr::filter(as.character(Date) == "260512", compound == "Ala")
-stopifnot(nrow(synthetic_ala) == 1)
-stopifnot(synthetic_ala$Comp_C[[1]] == 3)
-stopifnot(synthetic_ala$Deriv_C[[1]] == 3)
-stopifnot(synthetic_ala$Tot_C[[1]] == 6)
-stopifnot(isTRUE(all.equal(
-  synthetic_ala$`δreagent`[[1]],
-  (synthetic_ala$Tot_C[[1]] * synthetic_ala$`δderivatized`[[1]] -
-    synthetic_ala$Comp_C[[1]] * synthetic_ala$`δknown`[[1]]) /
-    synthetic_ala$Deriv_C[[1]],
-  tolerance = 1e-10
-)))
-
-# Known corrected Ala result used by the testthat regression fixture.
-synthetic_deriv_reference <- readxl::read_excel(
-  synthetic_reference_path,
-  sheet = "derivCorr",
-  col_names = FALSE
-)
-stopifnot(isTRUE(all.equal(
-  as.numeric(synthetic_deriv_reference[[2]][[4]]),
-  -27.3562998144931,
-  tolerance = 1e-10
-)))
-synthetic_ala
-```
-
-The testthat fixture compares the implementation against the benchmark's
-external-correction and derivatization-correction stages. The AA mix label is
-configurable because an export may label those injections differently from the
-reference standard ID.
+The synthetic regression benchmark in `tests/fixtures/DeltaCalculations_example.xlsx`
+is checked by the `testthat` suite. It compares external and NACME correction
+stages without treating the workbook as an instrument export. The AA mix label
+is configurable because exports may label those injections differently from
+the reference standard ID.

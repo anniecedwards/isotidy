@@ -10,6 +10,8 @@
 #' @param output_cols Character vector of columns to include in output
 #'   If NULL, uses defaults: run_id, sample_id, element, delta_value_final, amount
 #'   You can specify any columns that exist in df
+#' @param keep_available If TRUE, omit requested columns that are absent from
+#'   df. If FALSE, missing requested columns raise an error.
 #' @param verbose Print progress (default: TRUE)
 #'
 #' @return Dataframe with only specified columns
@@ -34,7 +36,17 @@
 #' c("run_id", "sample_id", "C.Percent", "delta_value_final",
 #'   "area_or_voltage", "instrument")
 #'
-prepare_output <- function(df, output_cols = NULL, verbose = TRUE) {
+prepare_output <- function(
+    df,
+    output_cols = NULL,
+    verbose = TRUE,
+    keep_available = FALSE
+) {
+
+  if (!is.logical(keep_available) || length(keep_available) != 1L ||
+      is.na(keep_available)) {
+    stop("'keep_available' must be TRUE or FALSE.")
+  }
 
   if (verbose) cat("Preparing output\n")
 
@@ -48,9 +60,13 @@ prepare_output <- function(df, output_cols = NULL, verbose = TRUE) {
   }
 
   missing_cols <- setdiff(output_cols, colnames(df))
-  if (length(missing_cols) > 0) {
+  if (length(missing_cols) > 0 && !keep_available) {
     stop(paste("Missing output columns:", paste(missing_cols, collapse = ", "),
                "\nAvailable columns:", paste(colnames(df), collapse = ", ")))
+  }
+
+  if (keep_available) {
+    output_cols <- intersect(output_cols, colnames(df))
   }
 
   output_df <- df[output_cols]

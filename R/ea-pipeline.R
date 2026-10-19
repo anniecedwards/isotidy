@@ -181,13 +181,10 @@ process_ea <- function(
     "delta_value_final"
   )
 
-  output_cols <- output_cols[
-    output_cols %in% colnames(data)
-  ]
-
   final_output <- prepare_output(
     df = data,
     output_cols = output_cols,
+    keep_available = TRUE,
     verbose = verbose
   )
 

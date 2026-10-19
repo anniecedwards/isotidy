@@ -22,177 +22,31 @@ save_ea_results <- function(
     prefix = NULL,
     verbose = TRUE
 ) {
-
-  if (!is.list(result)) {
-    stop("'result' must be the list returned by process_ea().")
+  .validate_peripheral_save_inputs(result, config, output_dir)
+  if (is.null(prefix)) prefix <- config$experiment_name
+  if (is.null(prefix) || is.na(prefix) || !nzchar(prefix)) {
+    stop("No filename prefix was supplied and config$experiment_name is missing.")
   }
 
-  if (is.null(result$output)) {
-    stop(
-      "The process_ea() result does not contain 'output'. ",
-      "Make sure process_ea() has completed the final output step."
-    )
-  }
-
-  if (!is.list(config)) {
-    stop("'config' must be the experiment configuration used by process_ea().")
-  }
-
-  if (
-    length(output_dir) != 1 ||
-    is.na(output_dir) ||
-    !nzchar(output_dir)
-  ) {
-    stop("'output_dir' must contain one non-empty path.")
-  }
-
-  if (is.null(prefix)) {
-
-    prefix <- config$experiment_name
-
-    if (
-      is.null(prefix) ||
-      is.na(prefix) ||
-      !nzchar(prefix)
-    ) {
-      stop(
-        "No filename prefix was supplied and ",
-        "config$experiment_name is missing."
-      )
-    }
-  }
-
-  dir.create(
-    output_dir,
-    recursive = TRUE,
-    showWarnings = FALSE
+  outputs <- list(
+    data_file = list(data = result$output, suffix = "processed"),
+    visualization_file = list(data = result$visualization_data, suffix = "visualization")
   )
-
-  data_file <- file.path(
-    output_dir,
-    paste0(prefix, "_processed.csv")
-  )
-
-  visualization_file <- NULL
-  if (!is.null(result$visualization_data)) {
-    visualization_file <- file.path(
-      output_dir,
-      paste0(prefix, "_visualization.csv")
-    )
-  }
-
-  report_file <- file.path(
-    output_dir,
-    paste0(prefix, "_processing_summary.html")
-  )
-
-  if (verbose) {
-    cat("Saving processed EA results\n")
-  }
-
-  utils::write.csv(
-    result$output,
-    file = data_file,
-    row.names = FALSE
-  )
-
-  if (!is.null(visualization_file)) {
-    utils::write.csv(
-      result$visualization_data,
-      file = visualization_file,
-      row.names = FALSE
-    )
-  }
-
-  if (verbose) {
-    cat(
-      "  Data:   ",
-      data_file,
-      "\n",
-      sep = ""
-    )
-  }
-
-  if (!requireNamespace("rmarkdown", quietly = TRUE)) {
-    stop(
-      "The 'rmarkdown' package is required to create the HTML report. ",
-      "Install it with install.packages('rmarkdown')."
-    )
-  }
-
-  template <- system.file(
-    "reports",
-    "EA_processing_summary.Rmd",
-    package = "isotidy"
-  )
-
-  # Fall back to the source tree in development
-  if (!nzchar(template)) {
-
-    development_template <- file.path(
-      "inst",
-      "reports",
-      "EA_processing_summary.Rmd"
-    )
-
-    if (file.exists(development_template)) {
-      template <- development_template
-    }
-  }
-
-  if (
-    !nzchar(template) ||
-    !file.exists(template)
-  ) {
-    stop(
-      "Could not find the EA processing report template. ",
-      "Expected: inst/reports/EA_processing_summary.Rmd"
-    )
-  }
-
-  if (verbose) {
-    cat(
-      "  Report: ",
-      report_file,
-      "\n",
-      sep = ""
-    )
-  }
-
-  rmarkdown::render(
-    input = template,
-    output_file = basename(report_file),
+  paths <- .save_peripheral_results(
+    result = result,
+    config = config,
     output_dir = output_dir,
-    params = list(
-      result = result,
-      config = config,
-      data_file = data_file
-    ),
-    envir = new.env(parent = globalenv()),
-    quiet = !verbose
+    prefix = prefix,
+    peripheral = "",
+    outputs = outputs,
+    report_params = "data_file",
+    development_template = file.path("inst", "reports", "EA_processing_summary.Rmd"),
+    package_template = "EA_processing_summary.Rmd",
+    verbose = verbose,
+    sanitize_prefix = FALSE,
+    prefer_package_template = TRUE
   )
 
-  if (verbose) {
-    cat("  ✓ EA results saved\n\n")
-  }
-
-  invisible(
-    list(
-      data_file = normalizePath(
-        data_file,
-        winslash = "/",
-        mustWork = FALSE
-      ),
-      visualization_file = if (is.null(visualization_file)) {
-        NULL
-      } else {
-        normalizePath(visualization_file, winslash = "/", mustWork = FALSE)
-      },
-      report_file = normalizePath(
-        report_file,
-        winslash = "/",
-        mustWork = FALSE
-      )
-    )
-  )
+  if (verbose) message("Saved EA results to ", normalizePath(output_dir, winslash = "/", mustWork = FALSE))
+  invisible(paths)
 }

@@ -54,31 +54,16 @@ build_linearity_model <- function(
     )
   }
 
-  formula <- stats::as.formula(
-    paste(delta_col, "~ area_or_voltage")
+  regression <- .fit_linear_regression(
+    data = model_df,
+    response = delta_col,
+    predictor = "area_or_voltage"
   )
-
-  model <- stats::lm(
-    formula,
-    data = model_df
-  )
-
-  summary_coefs <- summary(model)$coefficients
-
-  slope <- summary_coefs[
-    "area_or_voltage",
-    "Estimate"
-  ]
-
-  intercept <- summary_coefs[
-    "(Intercept)",
-    "Estimate"
-  ]
-
-  model_summary <- summary(model)
-
-  r_squared <- model_summary$r.squared
-  rse <- model_summary$sigma
+  model <- regression$model
+  slope <- regression$slope
+  intercept <- regression$intercept
+  r_squared <- regression$r_squared
+  rse <- regression$residual_std_error
 
   if (verbose) {
 

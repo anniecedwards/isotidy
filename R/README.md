@@ -12,7 +12,6 @@ One file per topic. Files are named `<area>-<topic>.R`, and the prefix groups th
 |---|---|
 | `config-schema.R` | `load_peripheral_schemas`, `get_peripheral_schema`, `validate_peripheral_schemas`, `validate_peripheral_schema` |
 | `config-experiment.R` | `load_IRMS_config`, `validate_config`, `create_config_template`, `get_config_element`, `get_isotope_system` |
-| `normalize.R` | `normalize_data` (generic entry point: raw data to canonical format via an adapter function) |
 
 ### Processing stages (peripheral-agnostic)
 
@@ -20,6 +19,7 @@ One file per topic. Files are named `<area>-<topic>.R`, and the prefix groups th
 |---|---|
 | `clean.R` | `clean_data` |
 | `standards.R` | `load_lab_standards`, `identify_standards`, `extract_standards` |
+| `linear-regression.R` | Shared linear fit and coefficient/statistic extraction helper |
 | `correct-mass.R` | `prepare_mass_standards`, `build_mass_model`, `apply_mass_correction` |
 | `correct-blank.R` | `identify_blanks`, `calculate_blank_stats`, `apply_blank_correction` |
 | `correct-linearity.R` | `build_linearity_model`, `apply_linearity_correction` |
@@ -69,7 +69,7 @@ Standards are re-extracted after each correction so later models see the correct
 
 ## Adding a peripheral
 
-Add a schema entry for the peripheral, then create `<peripheral>-adapter.R`, `<peripheral>-pipeline.R` and `<peripheral>-save.R`, mirroring the `ea-*` files. The adapter must produce the canonical columns that `normalize_data()` checks for. The stage files above are meant to be reused as-is.
+Add a schema entry for the peripheral, then create `<peripheral>-adapter.R`, `<peripheral>-pipeline.R` and `<peripheral>-save.R`, mirroring the existing peripheral files. The adapter must produce the canonical columns required by the shared processing stages. The stage files above are meant to be reused as-is.
 
 ## Conventions
 

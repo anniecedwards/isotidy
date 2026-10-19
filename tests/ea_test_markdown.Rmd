@@ -64,14 +64,4 @@ result <- process_ea(
 
 ```
 
-```{r save result}
-
-saved <- save_ea_results(
-  result = result,
-  config = config,
-  output_dir = "../data/202605_prelim_EA_experiment/analyzed_data"
-)
-
-```
-
 
