@@ -1,0 +1,120 @@
+---
+title: "Uncertainty propagation test bed: scale correction"
+output: html_document
+---
+
+This exploratory test bed checks whether `propagate` can handle a simple
+piece of the planned pipeline uncertainty calculation: a mean of sequential
+injections corrected with one shared linear calibration. The slope and
+intercept are drawn jointly from their fitted covariance matrix, so their
+correlation is retained and the same calibration uncertainty applies to the
+whole replicate mean.
+
+This is a synthetic example, not a validated uncertainty model for any
+instrument. The injection uncertainty below is specified for demonstration;
+it should eventually be replaced by external precision estimated from
+sequences of control-material injections.
+
+```{r setup}
+if (!requireNamespace("propagate", quietly = TRUE)) {
+  stop("Install the optional CRAN package 'propagate' to run this test bed.")
+}
+```
+
+## Fit a scale calibration
+
+The reference values are regressed on measured standard values, matching the
+scale calibration direction used by the pipeline. The fit's coefficient
+covariance is retained for joint draws of intercept and slope.
+
+```{r calibration}
+calibration_standards <- data.frame(
+  measured = c(-28.2, -19.7, -10.4, -1.1),
+  reference = c(-28.0, -19.5, -10.0, -0.8)
+)
+
+scale_fit <- stats::lm(reference ~ measured, data = calibration_standards)
+coef(scale_fit)
+stats::vcov(scale_fit)
+```
+
+## Propagate uncertainty for a sequential replicate mean
+
+The sample has three sequential injections. The uncertainty assigned to
+`measured_mean` is an illustrative external precision estimate for the mean
+of a three-injection sequence. It is supplied directly, rather than derived
+by dividing single-injection SD by the square root of three. The
+intercept and slope are represented by their fitted covariance matrix. They
+are shared calibration parameters, so the calibration contribution is drawn
+once for the mean rather than independently for each injection.
+
+```{r propagate}
+sample_injections <- c(-18.3, -18.0, -18.2)
+measured_mean <- mean(sample_injections)
+u_measured_mean <- 0.12 # illustrative SD of means from 3-injection sequences
+
+fit_coef <- stats::coef(scale_fit)
+fit_cov <- stats::vcov(scale_fit)
+input_means <- c(
+  intercept = unname(fit_coef[["(Intercept)"]]),
+  slope = unname(fit_coef[["measured"]]),
+  measured_mean = measured_mean
+)
+
+input_cov <- matrix(
+  0,
+  nrow = length(input_means),
+  ncol = length(input_means),
+  dimnames = list(names(input_means), names(input_means))
+)
+input_cov[c("intercept", "slope"), c("intercept", "slope")] <- fit_cov
+input_cov["measured_mean", "measured_mean"] <- u_measured_mean^2
+
+input_data <- rbind(
+  mean = input_means,
+  standard_uncertainty = sqrt(diag(input_cov))
+)
+
+set.seed(20261019)
+mc_result <- propagate::propagate(
+  expr = expression(intercept + slope * measured_mean),
+  data = input_data,
+  type = "stat",
+  cov = input_cov,
+  nsim = 100000,
+  alpha = 0.05,
+  check = FALSE # Skip Copula-margin fitting diagnostics for summary inputs.
+)
+
+mc_result$sim
+```
+
+## Compare with first-order propagation
+
+For this linear correction, first-order covariance propagation has a closed
+form. Agreement with the Monte Carlo standard deviation is a useful sanity
+check on the package call and on the covariance wiring. Nonlinear correction
+chains will need their own validation.
+
+```{r comparison}
+gradient <- c(
+  intercept = 1,
+  slope = measured_mean,
+  measured_mean = unname(fit_coef[["measured"]])
+)
+u_first_order <- sqrt(
+  drop(t(gradient) %*% input_cov %*% gradient)
+)
+
+comparison <- data.frame(
+  method = c("First-order covariance", "propagate Monte Carlo"),
+  standard_uncertainty = c(u_first_order, unname(mc_result$sim[[2]]))
+)
+comparison
+```
+
+The Monte Carlo result should be close to the first-order result for this
+linear example, with small differences from simulation error. This example
+does not yet include reference-material uncertainty, calibration residual
+scatter, blank/drift/linearity corrections, or uncertainty in the plotted
+x-axis.

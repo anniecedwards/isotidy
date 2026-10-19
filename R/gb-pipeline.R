@@ -108,7 +108,7 @@ process_gb <- function(
 
   if (is.null(exclude_patterns)) {
     exclude_patterns <- config$exclude_patterns %||%
-      c("on_off", "linearity", "blank", "CIT", "f2_si_26087")
+      c("on_off", "linearity", "blank")
   }
   exclude_patterns <- as.character(unlist(exclude_patterns, use.names = FALSE))
   if (anyNA(exclude_patterns) || any(!nzchar(exclude_patterns))) {

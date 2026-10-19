@@ -23,6 +23,7 @@ Imports:
     yaml
 Suggests: 
     rmarkdown,
-    knitr.
-    testthat (>= 3.0.0)
+    knitr,
+    testthat (>= 3.0.0),
+    propagate
 Config/testthat/edition: 3
