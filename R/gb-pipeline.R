@@ -254,27 +254,23 @@ process_gb <- function(
       drift_analysis <- drift_analysis[order(drift_analysis$analysis_no), , drop = FALSE]
     }
 
-    drift_correction$n_standard_analyses <- nrow(drift_analysis)
-    drift_correction$analysis_range <- if (nrow(drift_analysis)) {
-      range(drift_analysis$analysis_no)
-    } else {
-      c(NA_real_, NA_real_)
-    }
+    drift_model <- build_drift_model(
+      calibration_data = drift_analysis,
+      response_column = "mean_delta",
+      predictor_column = "analysis_no"
+    )
+    drift_correction$n_standard_analyses <- drift_model$n_observations
+    drift_correction$analysis_range <- drift_model$predictor_range
     drift_correction$standard_analyses <- drift_analysis
 
-    if (nrow(drift_analysis) >= 3L && length(unique(drift_analysis$analysis_no)) >= 3L) {
-      drift_regression <- .fit_linear_regression(
-        data = drift_analysis,
-        response = "mean_delta",
-        predictor = "analysis_no"
-      )
-      drift_fit <- drift_regression$model
-      reference_delta <- mean(stats::fitted(drift_fit))
-      drift_analysis$fitted_delta <- stats::fitted(drift_fit)
-      drift_analysis$drift_offset <- drift_analysis$fitted_delta - reference_delta
-      drift_analysis$corrected_delta <-
-        drift_analysis$mean_delta - drift_analysis$drift_offset
-      drift_analysis$residual <- stats::residuals(drift_fit)
+    if (!is.null(drift_model$model)) {
+      drift_fit <- drift_model$model
+      reference_delta <- drift_model$reference_value
+      fitted_analysis <- drift_model$calibration_data
+      drift_analysis$fitted_delta <- fitted_analysis$fitted_value
+      drift_analysis$drift_offset <- fitted_analysis$drift_offset
+      drift_analysis$corrected_delta <- fitted_analysis$corrected_value
+      drift_analysis$residual <- fitted_analysis$residual
       drift_correction$standard_analyses <- drift_analysis
       sample_analysis_no <- suppressWarnings(
         as.numeric(as.character(sample_data$analysis_no))
@@ -292,17 +288,17 @@ process_gb <- function(
         sample_data$delta_value_raw[correctable] - drift_offset[correctable]
       sample_data$drift_correction_applied <- correctable
       sample_data$drift_extrapolated[correctable] <-
-        sample_analysis_no[correctable] < min(drift_analysis$analysis_no) |
-        sample_analysis_no[correctable] > max(drift_analysis$analysis_no)
+        sample_analysis_no[correctable] < drift_model$predictor_range[[1]] |
+        sample_analysis_no[correctable] > drift_model$predictor_range[[2]]
 
       drift_correction$applied <- any(correctable)
       drift_correction$reason <- if (any(correctable)) "applied" else "no numeric sample analysis numbers"
       drift_correction$reference_delta <- reference_delta
-      drift_correction$slope_per_analysis <- drift_regression$slope
-      drift_correction$intercept <- drift_regression$intercept
-      drift_correction$r_squared <- drift_regression$r_squared
-      drift_correction$slope_p_value <- drift_regression$slope_p_value
-      drift_correction$residual_sd <- drift_regression$residual_std_error
+      drift_correction$slope_per_analysis <- drift_model$slope
+      drift_correction$intercept <- drift_model$intercept
+      drift_correction$r_squared <- drift_model$r_squared
+      drift_correction$slope_p_value <- drift_model$slope_p_value
+      drift_correction$residual_sd <- drift_model$residual_std_error
       drift_correction$extrapolated_rows <- sum(sample_data$drift_extrapolated)
     }
   }

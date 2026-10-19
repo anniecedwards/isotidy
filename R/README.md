@@ -20,6 +20,7 @@ One file per topic. Files are named `<area>-<topic>.R`, and the prefix groups th
 | `clean.R` | `clean_data` |
 | `standards.R` | `load_lab_standards`, `identify_standards`, `extract_standards` |
 | `linear-regression.R` | Shared linear fit and coefficient/statistic extraction helper |
+| `correct-drift.R` | `build_drift_model` for fitting drift across calibration points |
 | `correct-mass.R` | `prepare_mass_standards`, `build_mass_model`, `apply_mass_correction` |
 | `correct-blank.R` | `identify_blanks`, `calculate_blank_stats`, `apply_blank_correction` |
 | `correct-linearity.R` | `build_linearity_model`, `apply_linearity_correction` |
